@@ -15,7 +15,7 @@ Qyvr is a lightweight yet powerful event and hook system for JavaScript/Node.js.
 Import manually:
 
 ```js
-import { Qyvr } from './Qyvr.js'
+import { Qyvr } from './Qyvr.mjs'
 ```
 
 ## Event Structure
