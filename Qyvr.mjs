@@ -1,6 +1,7 @@
 const
 /**
- * Class representing a single event namespace with hook handling.
+ * Represents a single event namespace with hook handling.
+ * @class
  */
 Qyvent = class {
     /**
@@ -30,8 +31,8 @@ Qyvent = class {
     /**
      * Register a hook callback.
      * @param {string} pattern - The pattern to match (e.g., 'prefix.name.action').
-     * @param {Function} cb - The callback function.
-     * @param {string} [phase=this.main] - The execution phase.
+     * @param {Function} cb - The callback function to register.
+     * @param {string} [phase=this.main] - The execution phase to use.
      * @returns {Function} - A function to unregister the hook.
      */
     hook(pattern, cb, phase = this.main) {
@@ -46,147 +47,204 @@ Qyvent = class {
     }
 
     /**
-     * Find matching hooks for a pattern.
-     * @param {string} pattern - The event pattern to filter by.
-     * @returns {Array} - Matching hook objects.
+     * Check if a hook exists for the given pattern.
+     * @param {string} pattern - The pattern to look for.
+     * @returns {boolean} - True if a matching hook exists, otherwise false.
      */
-    filter(pattern) {
+    has(pattern) {
+        pattern = [...new Set([ this. id, ...pattern.split('.') ])]
         let 
-        name = pattern.split('.'),
-        id = name.shift(),
-        action = name.pop()
-        return this.hooks.filter(hook => {
-            if(id !== hook.id || action !== hook.action || hook.name.length !== name.length) {
-                return false 
-            } else {
-                return hook.name.every((part, index) => {
-                    return part === '*' || part === name[index]
-            })
-            }
-        })
+        id = pattern.shift(),
+        action = pattern.pop()
+        return this.hooks.findIndex(hook => id === hook.id && action == hook.action && pattern.join('.') === hook.name.join('.')) > -1
     }
 },
 
 /**
- * Event manager for organizing multiple Qyvent instances.
+ * Adds a new Qyvent instance to the map.
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} id - The event ID.
+ * @param {string[]} [phases=['main*']] - Phases for hook execution.
+ * @param {object} [ctx={}] - Shared context object.
  */
-Qyvr = class {
-    /**
-     * Internal map of Qyvent instances.
-     * @type {Map<string, Qyvent>}
-     */
-    #events = new Map()
+addEvent = (Qyvents, id, phases = ['main*'], ctx = {}) => {
+    Qyvents.set(id, new Qyvent(id, phases, ctx))
+},
 
-    /**
-     * Register a new event namespace.
-     * @param {string} id - The ID prefix for the event.
-     * @param {string[]} [phases] - Optional phase list.
-     * @param {object} [ctx] - Optional shared context.
-     */
-    add(id, phases, ctx) {
-        this.#events.set(id, new Qyvent(id, phases, ctx))
-    }
+/**
+ * Deletes an existing Qyvent instance from the map.
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} id - The event ID to delete.
+ */
+delEvent = (Qyvents, id) => {
+    Qyvents.delete(id)
+},
 
-    /**
-     * Remove an event namespace.
-     * @param {string} id - The ID prefix to remove.
-     */
-    del(id) {
-        this.#events.delete(id)
-    }
+/**
+ * Adds a generic hook to an event.
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} pattern - Pattern to match the hook.
+ * @param {Function} cb - Callback to execute.
+ * @param {string} [phase] - Optional execution phase.
+ * @returns {Function} - Function to unregister the hook.
+ */
+addHook = (Qyvents, pattern, cb, phase) => {
+    let 
+    id = pattern.split('.', 1)[0],
+    event = Qyvents.get(id)
+    return event.hook(pattern, cb, phase)
 
-    /**
-     * Check if a specific pattern has at least one hook.
-     * @param {string} pattern - The event pattern.
-     * @returns {boolean}
-     */
-    has(pattern) {
-        pattern = pattern.split('.')
-        let 
-        id = pattern.shift(),
-        action = pattern.pop(),
-        event = this.#events.get(id)
-        return event && event.hooks.findIndex(hook => id === hook.id && action == hook.action && pattern.join('.') === hook.name.join('.')) > -1
-    }
+},
 
-    /**
-     * Register a method-like hook (calls with `.call`).
-     * @param {string} pattern - The method pattern.
-     * @param {Function} cb - The callback to invoke.
-     * @returns {Function} - A function to unregister the hook.
-     */
-    method(pattern, cb) {
-        let 
-        id = pattern.split('.', 1)[0],
-        event = this.#events.get(id)
-        console.log("debug", id, event)
-        return event.hook(pattern + '.call', cb)
-    }
-
-    /**
-     * Register getter and setter hooks.
-     * @param {string} pattern - The property pattern.
-     * @param {Function} [getter=()=>{}] - The getter function.
-     * @param {Function} [setter=()=>{}] - The setter function.
-     * @returns {Function} - A function to unregister both hooks.
-     */
-    property(pattern, getter = ()=>{}, setter = ()=>{}) {
-        let 
-        id = pattern.split('.', 1)[0],
-        event = this.#events.get(id),
-        removeGetter = event.hook(pattern + '.get', getter),
-        removeSetter = event.hook(pattern + '.set', setter)
-        return () => {
-            removeGetter()
-            removeSetter()
+/**
+ * Fires hooks for a given pattern with provided arguments.
+ * Executes all matching hooks in the defined phase order.
+ * 
+ * @async
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} pattern - Pattern to match the hooks (e.g., 'id.name.action').
+ * @param {...any} args - Arguments to pass to each hook.
+ * @returns {Promise<any>} - The return value from the last matching hook, or undefined.
+ *
+ * @todo handle async & sync
+ * @todo need to work with single event filtered?
+ */
+fire = async (Qyvents, pattern, ...args) => {
+    pattern = pattern.split('.')
+    let 
+    id = pattern.shift(),
+    action = pattern.pop(),
+    event = Qyvents.get(id),
+    ctx = {
+        ...event.ctx,
+        args,
+        return: undefined,
+        stop() { ctx.stopped = true }
+    },
+    // filter event hooks by pattern
+    hooks = event.hooks.filter(hook => {
+        if(id !== hook.id || action !== hook.action || hook.name.length !== pattern.length) {
+            return false 
+        } else {
+            return hook.name.every((part, index) => {
+                return part === pattern[index] || part === '*'
+            })
+        }
+    })
+    //if(event.ctxRO) ...
+    for(const hook of hooks) {
+        const result = await Promise.resolve(hook.cb.call(ctx, ...args))
+        console.log("DEBUG FIRE", hook.id, hook.name, hook.action, result, hook)
+        if(result !== undefined) {
+            ctx.return = result
+        }
+        if(ctx.stopped) {
+            break
         }
     }
+    return ctx.return
+},
 
-    /**
-     * Register a general event hook.
-     * @param {string} pattern - The event pattern.
-     * @param {Function} cb - The hook function.
-     * @param {string} [phase] - Optional execution phase.
-     * @returns {Function} - A function to unregister the hook.
-     */
-    hook(pattern, cb, phase) {
-        let 
-        id = pattern.split('.', 1)[0],
-        event = this.#events.get(id)
-        return event.hook(pattern, cb, phase)
-    }
+/**
+ * Creates a proxy for a given namespace that routes get/apply operations through handler.
+ * 
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} ns - Namespace for the proxy.
+ * @param {ProxyHandler<any>} [handler={}] - Optional proxy handler.
+ * @returns {Proxy} - A proxy for the given namespace.
+ */
+QyvrProxy = (Qyvents, ns, handler = {}) => {
+    const Qyvr = function(){}
+    return new Proxy(Object.assign(Qyvr, { ns, Qyvents, handler }), handler)
+},
 
-    /**
-     * Fire an event and run all matching hooks asynchronously.
-     * @param {string} pattern - The event pattern.
-     * @param {...any} args - Arguments passed to each hook.
-     * @returns {Promise<any>} - The return value of the last non-undefined hook.
-     * 
-     * @todo (forced) sync execution?
-     */
-    async fire(pattern, ...args) {
-        let 
-        id = pattern.split('.', 1)[0],
-        event = this.#events.get(id),
-        ctx = {
-            ...event.ctx,
-            args,
-            return: undefined,
-            stop() { ctx.stopped = true }
-        }
-        //if(event.ctxRO) ...
-        for(const hook of event.filter(pattern)) {
-            const result = await Promise.resolve(hook.cb.call(ctx, ...args))
-            console.log("DEBUG FIRE", result, hook)
-            if(result !== undefined) {
-                ctx.return = result
+/**
+ * Initializes a Qyvr instance with the given options.
+ * Registers core hooks and sets up proxy behavior.
+ * 
+ * @param {object} [opts={}] - Options for Qyvr initialization.
+ * @param {object} [opts.ctx={}] - Shared context object for events.
+ * @param {Array} [opts.hooks=[]] - Initial hooks to register.
+ * @param {string} [opts.ns='qyvr'] - Default namespace for the Qyvr instance.
+ * @param {string[]} [opts.phases=['qyvr*']] - Hook execution phases.
+ * @param {ProxyHandler<any>} [opts.prx] - Optional proxy handler.
+ * @returns {Proxy} - A Qyvr proxy instance.
+ */
+Qyvr = function(opts = {}) {
+    const {
+        ctx = {},
+        hooks = [],
+        ns = 'qyvr',
+        phases = [ns + '*'],
+        prx = {
+            get: ({ ns, Qyvents, handler }, property) => {
+                const 
+                qyvr = Qyvents.get(ns),
+                callPattern = `${ns}.${property}.call`,
+                getPattern = `${ns}.${property}.get`
+                if(qyvr.has(callPattern)) {
+                    return (...args) => fire(Qyvents, callPattern, ...args)
+                } else {
+                    return fire(Qyvents, getPattern)
+                }
+            },
+            apply: ({ ns, Qyvents, handler }, thisArg, args) => {
+                return QyvrProxy(Qyvents, args[0], handler)
             }
-            if(ctx.stopped) {
-                break
-            }
         }
-        return ctx.return
+    } = opts,
+    Qyvents = new Map(),
+    coreHooks = [
+        // [ name, cb, optionalPhase ]
+        ...hooks,
+        [ 'add.call', addEvent ],
+        [ 'del.call', delEvent ],
+        [ 'hook.call', addHook ],
+        [ 'fire.call', fire ]
+    ]
+    // install core plugin
+    addEvent(Qyvents, ns, phases, ctx)
+    coreHooks.forEach(([name, cb, phase ]) => {
+        addHook(Qyvents, `${ns}.${name}`, cb.bind(null, Qyvents), phase)
+    })
+    return QyvrProxy(Qyvents, ns, prx)
+},
+
+/**
+ * Qyvr core property helper 
+ * Creates getter and setter hooks for a given property pattern.
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} pattern - The pattern for the property (e.g., 'id.name').
+ * @param {Function} [getter=()=>{}] - The getter function.
+ * @param {Function} [setter=()=>{}] - The setter function.
+ * @returns {Function} - Function to remove both getter and setter hooks.
+ */
+propertyHook = (Qyvents, pattern, getter = ()=>{}, setter = ()=>{}) => {
+    let 
+    id = pattern.split('.', 1)[0],
+    event = Qyvents.get(id),
+    removeGetter = event.hook(pattern + '.get', getter),
+    removeSetter = event.hook(pattern + '.set', setter)
+    return () => {
+        removeGetter()
+        removeSetter()
     }
+},
+
+/**
+ * Qyvr core method helper
+ * Creates a callable method hook in main phase and with "call" action.
+ * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
+ * @param {string} pattern - The pattern for the method (e.g., 'id.name').
+ * @param {Function} cb - The callback to invoke when the method is called.
+ * @returns {Function} - Function to unregister the hook.
+ */
+methodHook = (Qyvents, pattern, cb) => {
+    let 
+    id = pattern.split('.', 1)[0],
+    event = Qyvents.get(id)
+    console.log("debug", id, event)
+    return event.hook(pattern + '.call', cb)
 }
 
-export { Qyvr }
+export { Qyvr, propertyHook, methodHook }
