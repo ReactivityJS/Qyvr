@@ -2,15 +2,19 @@
 
 Qyvr is a lightweight yet powerful event and hook system for JavaScript/Node.js. It offers fully hookable, reactive, and observable event structures ideal for modular architectures, plugin-based systems, or proxy-driven APIs.
 
-## Core Features
+---
 
-* **Hookable Events**: Attach hooks to any event using structured patterns
-* **Reactive**: Dynamically respond to property or method changes
-* **Observable**: Wildcard support allows monitoring broad event scopes
-* **Context-Aware**: Hooks receive contextual data and execution control
-* **Sync & Async**: Hooks can be executed serially and awaitable
+## 🔧 Core Features
 
-## Usage
+* **Hookable Events** – Attach hooks to any event using structured patterns like `namespace.name.action`
+* **Reactive** – Hook property (actions `.get`, `.set`) or method (`.call`) events using matching event pattern
+* **Observable** – Wildcard support (e.g. `nodes.*.status.set`) for broad monitoring
+* **Context-Aware** – Hooks receive a context object with arguments, return overrides, and control flow
+* **Sync & Async** – Supports both synchronous (todo!) and asynchronous hooks, preserving phase order
+
+---
+
+## 📦 Installation
 
 Import manually:
 
@@ -18,9 +22,11 @@ Import manually:
 import { Qyvr } from './Qyvr.mjs'
 ```
 
-## Event Structure
+---
 
-Each event instance is registered by an `id` (prefix). Event names follow:
+## 🧠 Event Structure
+
+Each event instance is registered by an `id` (namespace). Event names follow:
 
 ```
 [id].[nameParts].[action]
@@ -28,11 +34,13 @@ Each event instance is registered by an `id` (prefix). Event names follow:
 
 Examples:
 
-* `sys.login.call`
-* `nodes.node1.status.set`
-* `nodes.*.status.set`
+- `sys.login.call`
+- `nodes.node1.status.set`
+- `nodes.*.status.set`
 
-## Example
+---
+
+## 🚀 Example
 
 ### Setup
 
@@ -42,7 +50,9 @@ qx.add('sys', ['pre', 'main*', 'post'])
 qx.add('nodes', ['main*'])
 ```
 
-### Registering Methods
+---
+
+### Registering a Method
 
 ```js
 qx.method('sys.login', function(username, password) {
@@ -50,22 +60,26 @@ qx.method('sys.login', function(username, password) {
   return username === 'admin'
 })
 
-await qx.fire('sys.login.call', 'admin', '1234')
+await qx.fire('sys.login.call', 'admin', '1234') // true
 ```
 
-### Registering Properties
+---
+
+### Registering a Property
 
 ```js
 let status = 'online'
 
 qx.property('nodes.node1.status',
-  function() { return status },
-  function(val) { status = val }
+  () => status,
+  (val) => { status = val }
 )
 
 await qx.fire('nodes.node1.status.set', 'offline')
-await qx.fire('nodes.node1.status.get') // returns 'offline'
+await qx.fire('nodes.node1.status.get') // 'offline'
 ```
+
+---
 
 ### Wildcard Hook
 
@@ -75,54 +89,94 @@ qx.hook('nodes.*.status.set', function(newValue) {
 })
 ```
 
-### Hook Context (`this`)
+---
 
-Every hook receives a special context as `this`:
+## 🔍 Hook Context
+
+Each hook receives a context object (`this` inside hook functions):
 
 ```js
 qx.hook('sys.logout.call', function() {
-  this.return = 'Logged out'   // Explicit return value
-  this.stop()                 // Abort remaining hooks
+  this.return = 'Logged out'   // Override return value
+  this.stop()                  // Abort any remaining hooks
 })
 ```
 
-**Available context properties:**
+### Context Properties
 
-* `this.args`: Arguments passed to `fire()`
-* `this.return`: Return value for the event
-* `this.stop()`: Stops further hook execution
-
-Alternatively, you can `return` a value directly from the hook (as long as it is not `undefined`).
-
-## API
-
-### `Qyvr.add(id, phases = ['main*'], ctx = {})`
-
-Adds a new event instance with a unique ID and optional hook phases.
-
-### `Qyvr.method(pattern, callback)`
-
-Registers a callable method hook under `[pattern].call`.
-
-### `Qyvr.property(pattern, getter, setter)`
-
-Registers getter and setter hooks for a reactive property.
-
-### `Qyvr.hook(pattern, callback, phase?)`
-
-Adds a hook to any event pattern, optionally specifying the execution phase.
-
-### `Qyvr.fire(pattern, ...args)`
-
-Triggers hooks matching the event pattern in phase order (awaits async hooks).
-
-### `Qyvr.has(pattern)`
-
-Checks if any hook matches a given pattern.
+- `this.args`: Original arguments passed to `fire()`
+- `this.return`: Mutable return value
+- `this.stop()`: Stops further hook execution
 
 ---
 
-## License
+## 🧪 API Reference
+
+### `Qyvr.add(id, phases = ['main*'], ctx = {})`
+
+Registers a new event namespace with optional execution phases and shared context.
+
+### `Qyvr.hook(pattern, callback, phase?)`
+
+Attaches a hook to a pattern like `sys.login.call`, optionally within a specific phase.
+
+### `Qyvr.method(pattern, callback)`
+
+Adds a callable method hook internally as `[pattern].call`.
+
+### `Qyvr.property(pattern, getter, setter)`
+
+Adds `.get` and `.set` hooks for a reactive property.
+
+### `Qyvr.fire(pattern, ...args)`
+
+Executes all hooks matching the pattern across phases. Supports async hooks.
+
+### `Qyvr.has(pattern)`
+
+Checks whether any hook exists for the given event pattern.
+
+---
+
+## 🧙‍♂️ Proxy Usage
+
+Qyvr supports dynamic proxies for intuitive usage:
+
+```js
+const $ = new Qyvr()
+$.add("user")
+$.hook("user.login.call", name => console.log("Logged in", name))
+
+const user = $("user")
+await user.login("Andre") // Triggers user.login.call
+```
+
+This transforms:
+
+- `user.login()` → `user.login.call`
+- `user.name` → `user.name.get`
+- `user.name = "Max"` → `user.name.set`
+
+---
+
+## 🚫 Internal Hooks
+
+Core hooks like `method.call` or `property.call` are used internally and are not intended to be called manually.
+
+You can extend Qyvr’s behavior by passing additional core hooks when initializing:
+
+```js
+const coreHooks = [
+  ["property.call", propertyHook],
+  ["method.call", methodHook]
+]
+
+const $ = new Qyvr({ hooks: coreHooks })
+```
+
+---
+
+## 📄 License
 
 MIT
 
