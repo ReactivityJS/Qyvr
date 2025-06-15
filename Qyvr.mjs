@@ -146,6 +146,31 @@ fire = async (Qyvents, pattern, ...args) => {
 },
 
 /**
+ * Proxy handler for Qyvr namespaces.
+ * Enables dynamic property and method access for event-driven interaction with Qyvr namespaces.
+ *
+ * default traps:
+ * - `get`: Intercepts property access and maps it to `.call` or `.get` events.
+ * - `apply`: Allows callable proxies that return new namespace-specific proxies.
+ */
+qyvrProxyHandler = {
+    get: ({ ns, Qyvents, handler }, property) => {
+        const 
+        qyvr = Qyvents.get(ns),
+        callPattern = `${ns}.${property}.call`,
+        getPattern = `${ns}.${property}.get`
+        if(qyvr.has(callPattern)) {
+            return (...args) => fire(Qyvents, callPattern, ...args)
+        } else {
+            return fire(Qyvents, getPattern)
+        }
+    },
+    apply: ({ ns, Qyvents, handler }, thisArg, args) => {
+        return QyvrProxy(Qyvents, args[0], handler)
+    }
+},
+
+/**
  * Creates a proxy for a given namespace that routes get/apply operations through handler.
  * 
  * @param {Map<string, Qyvent>} Qyvents - The map of event namespaces.
@@ -155,6 +180,7 @@ fire = async (Qyvents, pattern, ...args) => {
  */
 QyvrProxy = (Qyvents, ns, handler = {}) => {
     const Qyvr = function(){}
+    handler = { ...qyvrProxyHandler, ...handler }
     return new Proxy(Object.assign(Qyvr, { ns, Qyvents, handler }), handler)
 },
 
@@ -175,39 +201,38 @@ Qyvr = function(opts = {}) {
         ctx = {},
         hooks = [],
         ns = 'qyvr',
-        phases = [ns + '*'],
-        prx = {
-            get: ({ ns, Qyvents, handler }, property) => {
-                const 
-                qyvr = Qyvents.get(ns),
-                callPattern = `${ns}.${property}.call`,
-                getPattern = `${ns}.${property}.get`
-                if(qyvr.has(callPattern)) {
-                    return (...args) => fire(Qyvents, callPattern, ...args)
-                } else {
-                    return fire(Qyvents, getPattern)
-                }
-            },
-            apply: ({ ns, Qyvents, handler }, thisArg, args) => {
-                return QyvrProxy(Qyvents, args[0], handler)
-            }
-        }
+        phases = [ns + '*']
     } = opts,
     Qyvents = new Map(),
     coreHooks = [
         // [ name, cb, optionalPhase ]
         ...hooks,
+        [ 'plugin.call', qyvrPlugin ],
         [ 'add.call', addEvent ],
         [ 'del.call', delEvent ],
         [ 'hook.call', addHook ],
         [ 'fire.call', fire ]
     ]
     // install core plugin
+    return qyvrPlugin(Qyvents, ns, coreHooks, phases, ctx)
+},
+
+/**
+ * Install Qyvr plugin 
+ * Creating a new event namespace and registering hooks.
+ *
+ * @param {Map<string, any>} Qyvents - The central map containing all Qyvent instances.
+ * @param {string} ns - The namespace (event ID prefix) under which the hooks will be registered.
+ * @param {Array<[string, Function, string?]>} hooks - Array of hook definitions: [name, callback, optionalPhase].
+ * @param {string[]} [phases=['main*']] - Optional list of execution phases; one may end with '*' to denote default.
+ * @param {object} [ctx={}] - Optional context object shared across all hooks in this namespace.
+ */
+qyvrPlugin = (Qyvents, ns, hooks, phases, ctx) => {
     addEvent(Qyvents, ns, phases, ctx)
-    coreHooks.forEach(([name, cb, phase ]) => {
+    hooks.forEach(([name, cb, phase ]) => {
         addHook(Qyvents, `${ns}.${name}`, cb.bind(null, Qyvents), phase)
     })
-    return QyvrProxy(Qyvents, ns, prx)
+    return QyvrProxy(Qyvents, ns)
 },
 
 /**
