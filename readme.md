@@ -52,7 +52,14 @@ qx.add('nodes', ['main*'])
 
 ---
 
-### Registering a Method (optional plugin)
+### Registering a plugin
+
+Install plugin with event namespace and hooks. Returns a namespaced proxy object.
+```js
+prx = qx.plugin(namespace, hooks = [ [name, callback, phase], ... ], phases, ctx)
+```
+
+### Registering a Method (optional core hook)
 
 ```js
 qx.method('sys.login', function(username, password) {
@@ -65,7 +72,7 @@ await qx.fire('sys.login.call', 'admin', '1234') // true
 
 ---
 
-### Registering a Property (optional plugin)
+### Registering a Property (optional core hook)
 
 ```js
 let status = 'online'
