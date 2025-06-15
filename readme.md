@@ -52,7 +52,7 @@ qx.add('nodes', ['main*'])
 
 ---
 
-### Registering a Method
+### Registering a Method (optional plugin)
 
 ```js
 qx.method('sys.login', function(username, password) {
@@ -65,7 +65,7 @@ await qx.fire('sys.login.call', 'admin', '1234') // true
 
 ---
 
-### Registering a Property
+### Registering a Property (optional plugin)
 
 ```js
 let status = 'online'
@@ -120,11 +120,11 @@ Registers a new event namespace with optional execution phases and shared contex
 
 Attaches a hook to a pattern like `sys.login.call`, optionally within a specific phase.
 
-### `Qyvr.method(pattern, callback)`
+### `Qyvr.method(pattern, callback)` (optional plugin)
 
 Adds a callable method hook internally as `[pattern].call`.
 
-### `Qyvr.property(pattern, getter, setter)`
+### `Qyvr.property(pattern, getter, setter)` (optional plugin)
 
 Adds `.get` and `.set` hooks for a reactive property.
 
@@ -147,6 +147,7 @@ const $ = new Qyvr()
 $.add("user")
 $.hook("user.login.call", name => console.log("Logged in", name))
 
+// create a namespaced proxy object 
 const user = $("user")
 await user.login("Andre") // Triggers user.login.call
 ```
@@ -159,7 +160,7 @@ This transforms:
 
 ---
 
-## 🚫 Internal Hooks
+## 🚫 Optional Qyvr core plugins "methodHook" and "propertyHook"
 
 Core hooks like `method.call` or `property.call` are used internally and are not intended to be called manually.
 
